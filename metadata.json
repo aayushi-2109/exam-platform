@@ -1,0 +1,6 @@
+{
+  "name": "Exam Platform",
+  "description": "An offline exam creation, mapping, and taking platform with detailed analytics and a robust option-shuffling engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
