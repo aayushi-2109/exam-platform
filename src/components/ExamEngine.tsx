@@ -40,7 +40,7 @@ export default function ExamEngine({
   const [selections, setSelections] = useState<Record<string, 'A' | 'B' | 'C' | 'D' | 'E' | null>>({});
 
   // Timer states
-  const [timeLeft, setTimeLeft] = useState<number>(0); // in seconds
+  const [timeLeft, setTimeLeft] = useState<number | null>(null); // in seconds
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [timerInitialized, setTimerInitialized] = useState(false);
   const startTimeRef = useRef<number>(Date.now());
@@ -86,15 +86,18 @@ console.log("Starting time:", test.timer * 60);
 useEffect(() => {
   if (!timerInitialized) return;
 
-  if (timeLeft === -1) return; // Unlimited timer
+  // Wait until timer has actually been initialized
+  if (timeLeft === null) return;
 
-  if (timeLeft <= 0) {
+  if (timeLeft === -1) return;
+
+  if (timeLeft === 0) {
     handleFinalSubmit();
     return;
   }
 
   const interval = setInterval(() => {
-    setTimeLeft(prev => prev - 1);
+    setTimeLeft(prev => prev === null ? null : prev - 1);
   }, 1000);
 
   return () => clearInterval(interval);
@@ -111,6 +114,7 @@ useEffect(() => {
 
   // Convert seconds to readable MM:SS
   const formatTimeLeft = () => {
+    if (timeLeft === null) return "--:--";
     if (timeLeft === -1) return 'Unlimited';
     const minutes = Math.floor(timeLeft / 60);
     const seconds = timeLeft % 60;
@@ -134,9 +138,15 @@ useEffect(() => {
 
   // Auto/Manual Final Submit execution
   const handleFinalSubmit = () => {
-    const totalTimeTaken = getElapsedSeconds();
-    onSubmitExam(test.id, selections, totalTimeTaken, preparedList);
-  };
+  console.log("=== SUBMIT CALLED ===");
+  console.log("timeLeft:", timeLeft);
+  console.log("timerInitialized:", timerInitialized);
+  console.log("preparedList length:", preparedList.length);
+  console.log("selections:", selections);
+
+  const totalTimeTaken = getElapsedSeconds();
+  onSubmitExam(test.id, selections, totalTimeTaken, preparedList);
+};
 
   // Navigate checks
   const handlePrev = () => {
