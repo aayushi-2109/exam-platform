@@ -58,6 +58,8 @@ export default function ExamEngine({
     );
 
     setPreparedList(prepared);
+    console.log("Questions in test:", test.questions);
+console.log("Prepared:", prepared);
 
     // 3. Initialize selections with null for all questions
     const initialSelections = {} as Record<string, 'A' | 'B' | 'C' | 'D' | 'E' | null>;
