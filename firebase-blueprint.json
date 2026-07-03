@@ -1,0 +1,34 @@
+{
+  "collections": {
+    "tests": {
+      "fields": {
+        "id": "string",
+        "title": "string",
+        "timer": "number",
+        "shuffleQuestions": "boolean",
+        "shuffleOptions": "boolean",
+        "status": "string",
+        "createdAt": "number",
+        "creatorId": "string",
+        "questions": "array",
+        "answerMap": "map"
+      }
+    },
+    "attempts": {
+      "fields": {
+        "id": "string",
+        "testId": "string",
+        "testTitle": "string",
+        "userId": "string",
+        "score": "number",
+        "correctCount": "number",
+        "wrongCount": "number",
+        "unansweredCount": "number",
+        "timeTaken": "number",
+        "totalQuestions": "number",
+        "date": "number",
+        "questionsReview": "array"
+      }
+    }
+  }
+}

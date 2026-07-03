@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { UserType, Test, Attempt } from './types';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, googleProvider, signInWithPopup, signOut } from './firebase';
 import { 
-  getStoredCurrentUser, 
-  setStoredCurrentUser, 
-  getStoredTests, 
-  saveStoredTests, 
-  getStoredAttempts, 
-  saveStoredAttempts 
-} from './utils/storage';
+  seedInitialTestsIfEmpty, 
+  subscribeToTests, 
+  subscribeToAttempts, 
+  saveTest, 
+  deleteTest, 
+  saveAttempt, 
+  deleteAttempt 
+} from './utils/firestoreService';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import TestCreator from './components/TestCreator';
@@ -35,6 +38,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserType>('Me');
   const [tests, setTests] = useState<Test[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [user, setUser] = useState<any>(null);
   
   // Navigation State
   const [currentView, setCurrentView] = useState<'dashboard' | 'create-test' | 'answer-mapping' | 'take-test' | 'results' | 'analytics'>('dashboard');
@@ -42,24 +46,59 @@ export default function App() {
   const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Load from LocalStorage on mount
-  useEffect(() => {
-    setCurrentUser(getStoredCurrentUser());
-    setTests(getStoredTests());
-    setAttempts(getStoredAttempts());
-  }, []);
+  // Google Sign-In & Sign-Out handlers
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Error signing in with Google:', err);
+    }
+  };
 
-  // Update User Switcher
-  const handleUserChange = (user: UserType) => {
-    setCurrentUser(user);
-    setStoredCurrentUser(user);
-    // If we switch users while taking a test, go back to dashboard safely
-    if (currentView === 'take-test' || currentView === 'results') {
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
       setCurrentView('dashboard');
       setSelectedTestId(null);
       setSelectedAttemptId(null);
+    } catch (err) {
+      console.error('Error signing out:', err);
     }
   };
+
+  // Seed on mount once
+  useEffect(() => {
+    seedInitialTestsIfEmpty();
+  }, []);
+
+  // Listen to Auth State
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        setCurrentUser(firebaseUser.displayName || firebaseUser.email || 'Me');
+      } else {
+        setCurrentUser('Guest');
+      }
+    });
+    return () => unsubAuth();
+  }, []);
+
+  // Sync Tests from Firestore (real-time)
+  useEffect(() => {
+    const unsubTests = subscribeToTests(user?.uid || null, (updatedTests) => {
+      setTests(updatedTests);
+    });
+    return () => unsubTests();
+  }, [user?.uid]);
+
+  // Sync Attempts from Firestore (real-time)
+  useEffect(() => {
+    const unsubAttempts = subscribeToAttempts(user?.uid || null, (updatedAttempts) => {
+      setAttempts(updatedAttempts);
+    });
+    return () => unsubAttempts();
+  }, [user?.uid]);
 
   // Create Test trigger
   const handleCreateNewTest = () => {
@@ -86,37 +125,33 @@ export default function App() {
   };
 
   // Save Test from Creator
-  const handleSaveTest = (savedTest: Test) => {
-    let updated: Test[];
-    const exists = tests.some(t => t.id === savedTest.id);
-    
-    if (exists) {
-      updated = tests.map(t => t.id === savedTest.id ? savedTest : t);
-    } else {
-      updated = [...tests, savedTest];
+  const handleSaveTest = async (savedTest: Test) => {
+    try {
+      await saveTest(savedTest, user?.uid || null);
+      // Default navigate back to dashboard
+      setCurrentView('dashboard');
+    } catch (err) {
+      console.error('Failed to save test:', err);
     }
-    
-    setTests(updated);
-    saveStoredTests(updated);
-    
-    // Default navigate back to dashboard
-    setCurrentView('dashboard');
   };
 
   // Delete Test
-  const handleDeleteTest = (testId: string) => {
-    const updatedTests = tests.filter(t => t.id !== testId);
-    setTests(updatedTests);
-    saveStoredTests(updatedTests);
-
-    // Also clean up any attempts associated with this test
-    const updatedAttempts = attempts.filter(att => att.testId !== testId);
-    setAttempts(updatedAttempts);
-    saveStoredAttempts(updatedAttempts);
+  const handleDeleteTest = async (testId: string) => {
+    try {
+      await deleteTest(testId);
+      
+      // Also clean up any attempts associated with this test
+      const associatedAttempts = attempts.filter(att => att.testId === testId);
+      for (const att of associatedAttempts) {
+        await deleteAttempt(att.id);
+      }
+    } catch (err) {
+      console.error('Failed to delete test:', err);
+    }
   };
 
   // Duplicate Test
-  const handleDuplicateTest = (testId: string) => {
+  const handleDuplicateTest = async (testId: string) => {
     const target = tests.find(t => t.id === testId);
     if (!target) return;
 
@@ -125,39 +160,43 @@ export default function App() {
       id: `test-${Date.now()}`,
       title: `${target.title} (Copy)`,
       status: target.status === 'published' ? 'published' : 'pending_mapping',
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      creatorId: user?.uid || 'system'
     };
 
-    const updated = [...tests, duplicated];
-    setTests(updated);
-    saveStoredTests(updated);
+    try {
+      await saveTest(duplicated, user?.uid || null);
+    } catch (err) {
+      console.error('Failed to duplicate test:', err);
+    }
   };
 
   // Save Answer Key Mappings & update test status
-  const handleSaveMapping = (
+  const handleSaveMapping = async (
     testId: string, 
     answerMap: Record<string, 'A' | 'B' | 'C' | 'D' | 'E'>, 
     shouldPublish: boolean
   ) => {
-    const updated = tests.map(t => {
-      if (t.id === testId) {
-        return {
-          ...t,
-          answerMap,
-          status: shouldPublish ? ('published' as const) : ('pending_mapping' as const)
-        };
-      }
-      return t;
-    });
+    const targetTest = tests.find(t => t.id === testId);
+    if (!targetTest) return;
 
-    setTests(updated);
-    saveStoredTests(updated);
-    setCurrentView('dashboard');
-    setSelectedTestId(null);
+    const updatedTest: Test = {
+      ...targetTest,
+      answerMap,
+      status: shouldPublish ? 'published' : 'pending_mapping'
+    };
+
+    try {
+      await saveTest(updatedTest, user?.uid || null);
+      setCurrentView('dashboard');
+      setSelectedTestId(null);
+    } catch (err) {
+      console.error('Failed to save mapping:', err);
+    }
   };
 
   // Submit Exam & Automatic grading
-  const handleSubmitExam = (
+  const handleSubmitExam = async (
     testId: string,
     answers: Record<string, 'A' | 'B' | 'C' | 'D' | 'E' | null>,
     timeTaken: number,
@@ -215,15 +254,17 @@ export default function App() {
       timeTaken,
       totalQuestions,
       date: Date.now(),
+      userId: user?.uid || 'guest',
       questionsReview
     };
 
-    const updatedAttempts = [...attempts, newAttempt];
-    setAttempts(updatedAttempts);
-    saveStoredAttempts(updatedAttempts);
-
-    setSelectedAttemptId(newAttempt.id);
-    setCurrentView('results');
+    try {
+      await saveAttempt(newAttempt, user?.uid || null);
+      setSelectedAttemptId(newAttempt.id);
+      setCurrentView('results');
+    } catch (err) {
+      console.error('Failed to save attempt:', err);
+    }
   };
 
   // Navigate to results
@@ -261,12 +302,22 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => handleUserChange(currentUser === 'Me' ? 'Friend' : 'Me')}
-            className="text-xs font-semibold px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200/80 transition-colors"
-          >
-            {currentUser === 'Me' ? 'Me' : 'Friend'}
-          </button>
+          {user ? (
+            <button 
+              onClick={handleSignOut}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+              title="Sign Out"
+            >
+              {user.displayName?.split(' ')[0] || 'Sign Out'}
+            </button>
+          ) : (
+            <button 
+              onClick={handleGoogleSignIn}
+              className="text-xs font-semibold px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+            >
+              Sign In
+            </button>
+          )}
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="p-1 text-slate-500 hover:text-slate-800 transition-colors"
@@ -399,30 +450,46 @@ export default function App() {
 
         {/* User Workspace Indicator & Switcher */}
         <div className="mt-auto border-t border-slate-100 pt-5">
-          <div className="flex items-center justify-between px-1.5">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold font-display shadow-sm">
-                {currentUser === 'Me' ? 'M' : 'F'}
+          {user ? (
+            <div className="flex items-center justify-between px-1.5">
+              <div className="flex items-center gap-3 min-w-0">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt={user.displayName || ''} className="w-9 h-9 rounded-full shadow-sm" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-9 h-9 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold font-display shadow-sm shrink-0">
+                    {(user.displayName || 'M')[0]}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-900 leading-none truncate">
+                    {user.displayName || 'Me'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 font-mono">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse inline-block"></span>
+                    Active
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-900 leading-none">
-                  {currentUser === 'Me' ? 'Me' : 'Friend'}
-                </p>
-                <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 font-mono">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse inline-block"></span>
-                  Active
-                </p>
-              </div>
+              
+              <button 
+                onClick={handleSignOut}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200 cursor-pointer shrink-0"
+                title="Sign Out"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
             </div>
-            
-            <button 
-              onClick={() => handleUserChange(currentUser === 'Me' ? 'Friend' : 'Me')}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200"
-              title="Switch Workspace"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
+          ) : (
+            <div className="px-1.5">
+              <button 
+                onClick={handleGoogleSignIn}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-lg shadow-sm transition-colors cursor-pointer"
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Sign In with Google</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 

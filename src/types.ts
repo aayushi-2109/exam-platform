@@ -1,4 +1,4 @@
-export type UserType = 'Me' | 'Friend';
+export type UserType = string;
 
 export interface Option {
   key: 'A' | 'B' | 'C' | 'D' | 'E';
@@ -23,6 +23,7 @@ export interface Test {
   status: TestStatus;
   answerMap: Record<string, 'A' | 'B' | 'C' | 'D' | 'E'>; // questionId -> original correct option key
   createdAt: number;
+  creatorId?: string; // Google User UID or 'system'
 }
 
 export interface Attempt {
@@ -37,6 +38,7 @@ export interface Attempt {
   timeTaken: number; // in seconds
   totalQuestions: number;
   date: number; // timestamp
+  userId?: string; // Google User UID
   // To review answers, we store the question states as they were presented
   // including shuffles if any, what was selected, and what was correct.
   questionsReview: {

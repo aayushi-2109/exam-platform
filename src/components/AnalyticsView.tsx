@@ -82,7 +82,7 @@ export default function AnalyticsView({
             <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Workspace Reports</span>
             <h2 className="font-display font-bold text-slate-850 tracking-tight text-base sm:text-lg flex items-center gap-1.5">
               <BarChart2 className="w-5 h-5 text-indigo-600" />
-              <span>{currentUser === 'Me' ? 'My Analytics' : "Friend's Analytics"}</span>
+              <span>{currentUser === 'Me' ? 'My Analytics' : currentUser === 'Guest' ? 'Guest Analytics' : `${currentUser}'s Analytics`}</span>
             </h2>
           </div>
         </div>

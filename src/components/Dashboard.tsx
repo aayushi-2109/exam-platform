@@ -92,10 +92,10 @@ export default function Dashboard({
         <div className="relative z-10 space-y-4 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-semibold text-indigo-600">
             <Award className="w-3.5 h-3.5" />
-            <span>Workspace: {currentUser === 'Me' ? 'Personal' : "Friend's Shared Workspace"}</span>
+            <span>Workspace: {currentUser === 'Me' ? 'Personal' : currentUser === 'Guest' ? 'Guest' : `${currentUser}'s Shared Workspace`}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900">
-            Welcome, {currentUser === 'Me' ? 'Aayushi' : 'Guest Friend'}!
+            Welcome, {currentUser === 'Me' ? 'Aayushi' : currentUser}!
           </h2>
           <p className="text-slate-500 text-sm leading-relaxed">
             Create customizable exams, map correct answers directly from your notebook, shuffle options automatically, and track metrics.
