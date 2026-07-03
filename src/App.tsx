@@ -44,6 +44,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'create-test' | 'answer-mapping' | 'take-test' | 'results' | 'analytics'>('dashboard');
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
+  const [currentAttempt, setCurrentAttempt] = useState<Attempt | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Google Sign-In & Sign-Out handlers
@@ -125,15 +126,14 @@ export default function App() {
   };
 
   // Save Test from Creator
-  const handleSaveTest = async (savedTest: Test) => {
-    try {
-      await saveTest(savedTest, user?.uid || null);
-      // Default navigate back to dashboard
-      setCurrentView('dashboard');
-    } catch (err) {
-      console.error('Failed to save test:', err);
-    }
-  };
+const handleSaveTest = async (savedTest: Test) => {
+  try {
+    await saveTest(savedTest, user?.uid || null);
+    setCurrentView('dashboard');
+  } catch (err) {
+    console.error('Failed to save test:', err);
+  }
+};
 
   // Delete Test
   const handleDeleteTest = async (testId: string) => {
@@ -260,6 +260,7 @@ export default function App() {
 
     try {
       await saveAttempt(newAttempt, user?.uid || null);
+      setCurrentAttempt(newAttempt);
       setSelectedAttemptId(newAttempt.id);
       setCurrentView('results');
     } catch (err) {
@@ -285,7 +286,11 @@ export default function App() {
   // Select test for taking
   const activeExamTest = selectedTestId ? tests.find(t => t.id === selectedTestId) || null : null;
   // Select attempt for reviewing results
-  const activeAttempt = selectedAttemptId ? attempts.find(a => a.id === selectedAttemptId) || null : null;
+  const activeAttempt =
+  currentAttempt ||
+  (selectedAttemptId
+    ? attempts.find(a => a.id === selectedAttemptId) || null
+    : null);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans selection:bg-indigo-100 selection:text-indigo-800 antialiased">

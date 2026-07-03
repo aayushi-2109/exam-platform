@@ -42,6 +42,7 @@ export default function ExamEngine({
   // Timer states
   const [timeLeft, setTimeLeft] = useState<number>(0); // in seconds
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [timerInitialized, setTimerInitialized] = useState(false);
   const startTimeRef = useRef<number>(Date.now());
 
   // Prepare questions on mount
@@ -74,25 +75,30 @@ console.log("Prepared:", prepared);
     } else {
       setTimeLeft(-1); // infinite timer
     }
+    setTimerInitialized(true);
+    console.log("Timer from Firestore:", test.timer);
+console.log("Starting time:", test.timer * 60);
     
     startTimeRef.current = Date.now();
   }, [test]);
 
   // Countdown clock loop
-  useEffect(() => {
-    if (timeLeft === -1) return; // no timer
-    if (timeLeft === 0) {
-      // Auto submit!
-      handleFinalSubmit();
-      return;
-    }
+useEffect(() => {
+  if (!timerInitialized) return;
 
-    const interval = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
-    }, 1000);
+  if (timeLeft === -1) return; // Unlimited timer
 
-    return () => clearInterval(interval);
-  }, [timeLeft]);
+  if (timeLeft <= 0) {
+    handleFinalSubmit();
+    return;
+  }
+
+  const interval = setInterval(() => {
+    setTimeLeft(prev => prev - 1);
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [timeLeft, timerInitialized]);
 
   // Calculate elapsed time taken
   const getElapsedSeconds = () => {
